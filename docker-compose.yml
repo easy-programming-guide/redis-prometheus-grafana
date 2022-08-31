@@ -1,0 +1,84 @@
+version: "3.9"
+services:
+  grafana:
+    image: grafana/grafana
+    ports:
+      - 3000:3000
+    volumes:
+      - GF_PATHS_CONFIG:/etc/grafana/
+      - GF_PATHS_DATA:/var/lib/grafana
+      - GF_PATHS_HOME:/usr/share/grafana
+      - GF_PATHS_LOGS:/var/log/grafana
+      - GF_PATHS_PLUGINS:/var/lib/grafana/plugins
+      - GF_PATHS_PROVISIONING:/etc/grafana/provisioning
+    networks:
+      - demo
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - demo
+
+  redis-master:
+    image: "bitnami/redis:4.0.11-r15"
+    ports:
+      - 6379:6379
+    environment:
+      - REDIS_REPLICATION_MODE=master
+      - REDIS_PASSWORD=my_master_password
+    networks:
+      - demo
+    volumes:
+      - 'redis_data:/bitnami/redis/data'
+
+  redis-slaves:
+    image: "bitnami/redis:4.0.11-r15"
+    environment:
+      - REDIS_REPLICATION_MODE=slave
+      - REDIS_PASSWORD=my_master_password
+      - REDIS_MASTER_HOST=redis-master
+      - REDIS_MASTER_PORT_NUMBER=6379
+      - REDIS_MASTER_PASSWORD=my_master_password
+      - REDIS_EXTRA_FLAGS=--slave-read-only yes --slave-serve-stale-data yes --databases 1
+    ports:
+      - 6379    
+    deploy:
+      mode: replicated
+      replicas: 5
+      endpoint_mode: vip
+    depends_on:
+      - redis-master  
+    networks:
+      - demo
+
+  redis-exporter:
+    image: bitnami/redis-exporter:1.9.0
+    ports:
+      - 9121:9121
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis-master:6379"
+      REDIS_USER: null
+      REDIS_PASSWORD: my_master_password
+    networks:
+      - demo
+
+networks:
+  demo:
+    name: demo
+    driver: bridge
+
+volumes:
+  GF_PATHS_CONFIG:
+  GF_PATHS_DATA:
+  GF_PATHS_HOME:
+  GF_PATHS_LOGS:
+  GF_PATHS_PLUGINS:
+  GF_PATHS_PROVISIONING:
+  redis_data:
+
